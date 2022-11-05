@@ -85,7 +85,7 @@ Proxy 도입으로 2초 절약이 된다.
 #### CacheProxy 예제
 
 > 예제 구조
-![](../../../Desktop/스크린샷 2022-11-05 오후 9.51.20.png)
+<img width="584" alt="스크린샷 2022-11-05 오후 9 51 20" src="https://user-images.githubusercontent.com/37995817/200124066-26706494-b94a-45a4-8157-6f4be18cd26e.png">
 
 <br>
 
@@ -225,7 +225,7 @@ RealComponent를 실행시키는게 목표고, 그 앞에 Proxy체인으로 부�
 
 
 > 예제 구조
-![](../../../Desktop/스크린샷 2022-11-05 오후 10.41.46.png)
+<img width="546" alt="스크린샷 2022-11-05 오후 10 41 46" src="https://user-images.githubusercontent.com/37995817/200124076-c96b99ee-ac70-4562-965f-078243a65fe2.png">
 
 
 * RealComponent.java(실제 작동 객체)
