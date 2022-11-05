@@ -1,5 +1,8 @@
-package hello.proxy.pureproxy.proxy.code;
+package hello.proxy.pureproxy.proxy;
 
+import hello.proxy.pureproxy.proxy.code.CacheProxy;
+import hello.proxy.pureproxy.proxy.code.ProxyPatternClient;
+import hello.proxy.pureproxy.proxy.code.RealSubject;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.Test;
 

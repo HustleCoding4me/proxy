@@ -1,0 +1,46 @@
+package hello.proxy.pureproxy.decorator;
+
+import hello.proxy.pureproxy.decorator.code.*;
+import lombok.extern.slf4j.Slf4j;
+import org.junit.jupiter.api.Test;
+
+@Slf4j
+public class DecoratorPatternTest {
+
+    /**
+     * 데코레이션 패턴 사용 X
+     */
+    @Test
+    void noDecorator() {
+        Component realComponent = new RealComponent();
+        DecoratorPatternClient client = new DecoratorPatternClient(realComponent);
+        client.execute();
+
+    }
+
+
+    /**
+     * MessageDecorator만 붙인 상태
+     */
+    @Test
+    void decorator1() {
+        Component realComponent = new RealComponent();
+        Component messageDecorator = new MessageDecorator(realComponent);
+        DecoratorPatternClient client = new DecoratorPatternClient(messageDecorator);
+        client.execute();
+    }
+
+
+    /**
+     * Proxy 체인으로 MessageDecorator, LogDecorator를 붙인 상태
+     */
+    @Test
+    void decorator2() {
+        Component realComponent = new RealComponent();
+        Component messageDecorator = new MessageDecorator(realComponent);
+        Component TimeDecorator = new TimeDecorator(messageDecorator);
+        DecoratorPatternClient client = new DecoratorPatternClient(TimeDecorator);
+        client.execute();
+
+    }
+}
