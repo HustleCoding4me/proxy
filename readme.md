@@ -225,8 +225,7 @@ RealComponent를 실행시키는게 목표고, 그 앞에 Proxy체인으로 부�
 
 
 > 예제 구조
-<img width="546" alt="스크린샷 2022-11-05 오후 10 41 46" src="https://user-images.githubusercontent.com/37995817/200124076-c96b99ee-ac70-4562-965f-078243a65fe2.png">
-
+1
 
 * RealComponent.java(실제 작동 객체)
 
@@ -395,3 +394,146 @@ public class DecoratorPatternTest {
 ```
 
 
+---
+
+
+# 동적 프록시
+
+프록시를 동작을 원하는 개수만큼 생성해놓는게 아니라,<br>
+동적으로 객체를 만들 수 있다.<br>
+프록시를 적용할 코드를 하나 만들고, 동적 프록시 기술로 원하는 만큼 찍어내면 된다.<br>
+<br>
+
+그러기 위해서는 기본적으로 자바가 어떤 클래스, 어떤 메서드던지 획득, 작동을 시킬 수 있어야 한다.<br>
+그래서 자바에서는 Reflection API를 제공한다.<br>
+
+---
+
+## Reflection API
+
+<br>
+대표적으로 package명으로 Class를 가져오고,<br>
+이름으로 해당 Class의 Method명을 가져오면 된다.<br>
+<br>
+개인적으로는 해당 Class의 Method를 전부 가져와서<br>
+Enum으로 메서드명을 value로 가져와서 일치하면 실행시키는 식으로 개발했었다.<br>
+<br>
+
+### 예시
+
+```java
+@Slf4j
+public class ReflectionTest {
+
+    /**
+     * Reflection이 필요한 상황
+     */
+    @Test
+    void reflection0() {
+        Hello target = new Hello();
+
+        /**
+         * 호출하는 메서드만 다르고 나머지는 동일한 동작.
+         * 공통 로직 1과 2를 하나의 메서드로 뽑아서 합칠 수 있을까?
+         */
+        //공통 로직1 시작
+        log.info("start");
+        String result1 = target.callA();//호출하는 메서드가 다름
+        log.info("result={}", result1);
+        //공통 로직1 종료
+
+        //공통 로직2 시작
+        log.info("start");
+        String result2 = target.callB();//호출하는 메서드가 다름
+        log.info("result={}", result2);
+        //공통 로직2 종료
+
+    }
+
+    /**
+     * Reflection을 사용.
+     * 클래스 정보를 획득하여 사용 예제
+     */
+
+    @Test
+    void reflection1() throws Exception {
+        //클래스 정보
+        Class classHello = Class.forName("hello.proxy.jdkdynamic.ReflectionTest$Hello");
+
+        Hello target = new Hello();
+
+        //callA 메서드 정보
+        Method methodCallA = classHello.getMethod("callA");
+        Object result1 = methodCallA.invoke(target);
+        log.info("result1={}", result1);
+
+        //callB 메서드 정보
+        Method methodCallB = classHello.getMethod("callB");
+        Object result2 = methodCallB.invoke(target);
+        log.info("rsult2={}", result2);
+    }
+
+    /**
+     * Reflection 을 사용해 더 동적으로 만들어보기
+     */
+    @Test
+    void reflection2() throws Exception {
+        //클래스 정보
+        Class classHello = Class.forName("hello.proxy.jdkdynamic.ReflectionTest$Hello");
+
+        Hello target = new Hello();
+
+        //callA 메서드 정보
+        Method methodCallA = classHello.getMethod("callA");
+        dynamicCall(methodCallA, target);
+        //callB 메서드 정보
+        Method methodCallB = classHello.getMethod("callB");
+        dynamicCall(methodCallB, target);
+        }
+
+    private void dynamicCall(Method method, Object target) throws Exception{
+        log.info("start");
+        Object result = method.invoke(target);
+        log.info("result={}", result);
+
+    }
+
+    /**
+     * Runtime에 동작하기 때문에 컴파일 시점에 오류를 잡기 힘들다.
+     * 그래서 일반적으로 사용하지 않으면 좋다.
+     * 너무 일반적인 공통 처리가 필요할 때 부분적으로 주의해서 사용해야 한다.
+     */
+    @Slf4j
+    static class Hello {
+        public String callA() {
+            log.info("callA");
+            return "A";
+        }
+
+        public String callB() {
+            log.info("callB");
+            return "B";
+        }
+    }
+}
+
+```
+
+#### Reflection 주의사항
+
+
+* Runtime에 동작하기 때문에 컴파일 시점에 오류를 잡기 힘들다.
+* 그래서 일반적으로 사용하지 않으면 좋다.
+* 너무 일반적인 공통 처리가 필요할 때 부분적으로 주의해서 사용해야 한다.
+
+
+
+
+## JDK Dynamic Proxy
+
+### JDK Dynamic Proxy란?
+
+* JDK에서 제공하는 Dynamic Proxy 기능을 사용하면 인터페이스 기반의 프록시 객체를 쉽게 생성할 수 있다.
+* JDK Dynamic Proxy는 인터페이스를 구현한 클래스의 객체를 생성할 때 사용한다.(인터페이스가 필수)
+* JDK Dynamic Proxy는 InvocationHandler 인터페이스를 구현한 클래스의 객체를 생성자 파라미터로 넘겨주면 된다.
+* JDK Dynamic Proxy는 인터페이스의 모든 메서드를 구현한 프록시 객체를 생성한다.
