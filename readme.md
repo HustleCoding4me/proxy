@@ -535,5 +535,101 @@ public class ReflectionTest {
 
 * JDK에서 제공하는 Dynamic Proxy 기능을 사용하면 인터페이스 기반의 프록시 객체를 쉽게 생성할 수 있다.
 * JDK Dynamic Proxy는 인터페이스를 구현한 클래스의 객체를 생성할 때 사용한다.(인터페이스가 필수)
-* JDK Dynamic Proxy는 InvocationHandler 인터페이스를 구현한 클래스의 객체를 생성자 파라미터로 넘겨주면 된다.
+* JDK Dynamic Proxy는 `InvocationHandler` 인터페이스를 구현한 클래스의 객체를 생성자 파라미터로 넘겨주면 된다.
 * JDK Dynamic Proxy는 인터페이스의 모든 메서드를 구현한 프록시 객체를 생성한다.
+
+### JDK Dynamic Proxy 예제
+
+> 공통 기능을 가진 Proxy를 구현
+
+```java
+@Slf4j
+public class TimeInvocationHandler implements InvocationHandler {
+
+    private final Object target;
+
+    public TimeInvocationHandler(Object target) {
+        this.target = target;
+    }
+
+    @Override
+    public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
+        log.info("TimeProxy 실행");
+        long start = System.currentTimeMillis();
+
+        Object result = method.invoke(target, args);
+
+        long end = System.currentTimeMillis();
+        log.info("TimeProxy 종료");
+        log.info("TimeProxy 실행 시간: {}ms", end - start);
+        return result;
+    }
+}
+
+
+```
+* InvocationHandler을 구현하여 공통 기능을 구현한다. (invoke 메서드)
+
+<br>
+
+> JDK Dynamic Proxy를 사용해 구현
+
+```java
+
+@Slf4j
+public class JdkDynamicProxyTest {
+
+    /**
+     * 핵심은 target용 Proxy 객체를 각각 생성해준 것이 아닌,
+     * TimeInvocationHandler에 공통 기능을 담고, 공통기능을 A구현체, B구현체에 적용시킨 것이다.
+     */
+    @Test
+    void dynamicA() {
+        
+        //A 객체 앞에 TimeInvocationHanlder 적용
+        AInterface target = new AImpl();
+
+        TimeInvocationHandler handler = new TimeInvocationHandler(target);
+
+        AInterface proxy = (AInterface) Proxy.newProxyInstance(AInterface.class.getClassLoader(), new Class[]{AInterface.class},
+                handler);
+
+        proxy.call();
+        log.info("tagetClass={}", target.getClass());
+        log.info("proxyClass={}", proxy.getClass());
+
+        
+        //B 객체 앞에 TimeInvocationHanlder 적용
+        BInterface targetB = new BImpl();
+        TimeInvocationHandler handlerB = new TimeInvocationHandler(targetB);
+
+        BInterface proxyB = (BInterface) Proxy.newProxyInstance(BInterface.class.getClassLoader(),
+                new Class[]{BInterface.class},
+                handler);
+
+        proxyB.call();
+        log.info("tagetClass={}", target.getClass());
+        log.info("proxyClass={}", proxy.getClass());
+
+    }
+    
+}
+
+```
+
+
+* ` public static Object newProxyInstance(ClassLoader loader,
+  Class<?>[] interfaces,
+  InvocationHandler h)` : Proxy 객체를 생성하는 메서드이다.<br> 해당 메서드로 Proxy 객체를 받아 원하는 Interface로 형변환 하면 프록시 객체가 생성되는데,<br>
+    이 때, InvocationHandler의 invoke 메서드가 호출된다.(구현한)
+
+#### JDK 동적 프록시를 적용한 뒤, 얻는 이점
+
+* 공통 기능을 가진 Proxy 객체를 한번만 구현한 뒤, 원하는 모든 객체에 적용 가능하다.(필요할 때 생성해서)
+
+<br>
+
+## CGLIB
+
+
+
