@@ -623,13 +623,140 @@ public class JdkDynamicProxyTest {
   InvocationHandler h)` : Proxy 객체를 생성하는 메서드이다.<br> 해당 메서드로 Proxy 객체를 받아 원하는 Interface로 형변환 하면 프록시 객체가 생성되는데,<br>
     이 때, InvocationHandler의 invoke 메서드가 호출된다.(구현한)
 
+
+
+### JDK Dynamic Proxy 예제2
+
+Method Naming 패턴에 따라 다른 로직을 수행하는 Proxy를 구현
+
+> 공통 적용소스인 Handler를 제작한다. pattern에 따라 다른 로직을 수행한다. (pattern은 외부주입)
+
+```java
+public class LogTraceFilterHandler implements InvocationHandler {
+
+    private final Object target;
+    private final LogTrace logTrace;
+    private final String[] patterns;
+
+    public LogTraceFilterHandler(Object target, LogTrace logTrace, String[] patterns) {
+        this.target = target;
+        this.logTrace = logTrace;
+        this.patterns = patterns;
+    }
+
+    /**
+     *
+     * method 이름 패턴에 따라 작동시킬지 결정
+     */
+
+    @Override
+    public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
+        //메서드 이름 필터
+        String methodName = method.getName();
+        /**
+         * 특정 메서드명 패턴에 매치되지 않으면 Log를 찍지 않고( 별다른 공통 소스 없이)
+         * 원본 메서드를 작동시킨다.
+         */
+        //save, request, reque*, *est
+        if (!PatternMatchUtils.simpleMatch(patterns, methodName)) {
+            return method.invoke(target, args);
+        }
+        TraceStatus status = logTrace.begin(method.getDeclaringClass() + "." + methodName + "()");
+        Object result = method.invoke(target, args);
+        logTrace.end(status);
+
+        return result;
+    }
+}
+
+```
+
+
+<br>
+
+> Proxy를 사용하는 소스 Bean 등록 (Interface Impl, Handler, Proxy)
+
+```java
+
+@Configuration
+public class DynamicProxyFilterConfig {
+
+    /**
+     *메서드 명 패턴이 아래와 같아야 handler 실행
+     */
+
+    /**
+     * [dc4b7a40] interface hello.proxy.app.v1.OrderControllerV1.request()
+     * [dc4b7a40] |-->interface hello.proxy.app.v1.OrderServiceV1.orderItem()
+     * [dc4b7a40] |   |-->interface hello.proxy.app.v1.OrderRepositoryV1.save()
+     * [dc4b7a40] |   |<--interface hello.proxy.app.v1.OrderRepositoryV1.save() time=1007ms
+     * [dc4b7a40] |<--interface hello.proxy.app.v1.OrderServiceV1.orderItem() time=1016ms
+     * [dc4b7a40] interface hello.proxy.app.v1.OrderControllerV1.request() time=1018ms
+     */
+    private static final String[] PATTERNS = {"request", "order*", "save*"};
+
+    @Bean
+    public OrderControllerV1 orderControllerV1(LogTrace logTrace) {
+        OrderRepositoryV1 orderRepository = orderRepositoryV1(logTrace);
+
+        return (OrderControllerV1) Proxy.newProxyInstance(OrderControllerV1.class.getClassLoader(),
+                new Class[]{OrderControllerV1.class},
+                new LogTraceFilterHandler(new OrderControllerV1Impl(orderServiceV1(logTrace)), logTrace, PATTERNS));
+
+    }
+
+    @Bean
+    OrderServiceV1 orderServiceV1(LogTrace logTrace) {
+        OrderServiceV1 orderService = new OrderServiceV1Impl(orderRepositoryV1(logTrace));
+
+        OrderServiceV1 proxy = (OrderServiceV1) Proxy.newProxyInstance(OrderServiceV1.class.getClassLoader(),
+                new Class[]{OrderServiceV1.class},
+                new LogTraceFilterHandler(orderService, logTrace, PATTERNS));
+
+        return proxy;
+    }
+    
+    @Bean
+    public OrderRepositoryV1 orderRepositoryV1(LogTrace logTrace) {
+        OrderRepositoryV1 orderRepository = new OrderRepositoryV1Impl();
+
+        OrderRepositoryV1 proxy = (OrderRepositoryV1) Proxy.newProxyInstance(OrderRepositoryV1.class.getClassLoader(),
+                new Class[]{OrderRepositoryV1.class},
+                new LogTraceFilterHandler(orderRepository, logTrace, PATTERNS));
+
+        return proxy;
+    }
+}
+
+```
+
+
+
+
 #### JDK 동적 프록시를 적용한 뒤, 얻는 이점
 
 * 공통 기능을 가진 Proxy 객체를 한번만 구현한 뒤, 원하는 모든 객체에 적용 가능하다.(필요할 때 생성해서)
 
+
+
+
+
 <br>
 
 ## CGLIB
+
+Interface가 아닌 Class에도 Proxy를 적용할 수 있다.<br>
+바이트코드로 조작하는 방식이다. (JDK는 인터페이스 기반)<br>
+
+<br>
+
+> JDK Proxt vs CGLIB Proxy
+
+* JDK Proxy는 Interface 기반으로 동작한다. (Interface가 없으면 동작하지 않는다.)<br>
+* CGLIB는 Interface가 없어도 동작한다. (Class 기반으로 동작한다.)<br>
+* CGLIB는 JDK Proxy보다 느리다. (JDK Proxy는 Interface 기반으로 동작하기 때문에, Interface가 있으면 바이트코드를 조작하지 않고 바로 호출한다.)<br>
+* CGLIB는 JDK Proxy보다 많은 메모리를 사용한다. (JDK Proxy는 Interface 기반으로 동작하기 때문에, Interface가 있으면 바이트코드를 조작하지 않고 바로 호출한다.)<br>
+
 
 
 
