@@ -750,13 +750,125 @@ Interface가 아닌 Class에도 Proxy를 적용할 수 있다.<br>
 
 <br>
 
-> JDK Proxt vs CGLIB Proxy
+### JDK Proxy vs CGLIB Proxy
 
 * JDK Proxy는 Interface 기반으로 동작한다. (Interface가 없으면 동작하지 않는다.)<br>
 * CGLIB는 Interface가 없어도 동작한다. (Class 기반으로 동작한다.)<br>
 * CGLIB는 JDK Proxy보다 느리다. (JDK Proxy는 Interface 기반으로 동작하기 때문에, Interface가 있으면 바이트코드를 조작하지 않고 바로 호출한다.)<br>
 * CGLIB는 JDK Proxy보다 많은 메모리를 사용한다. (JDK Proxy는 Interface 기반으로 동작하기 때문에, Interface가 있으면 바이트코드를 조작하지 않고 바로 호출한다.)<br>
+* 네이밍 규칙 :  `proxyClass=class com.sun.proxy.$Proxy0` vs `대상클래스$$EnhancerByCGLIB$$임의코드`<br>
+
+<br>
+
+<br>
+
+CGLIB는 보통 직접 구현해서 사용하는 경우는 없다. `ProxyFactoryBean`을 사용한다.<br>
+
+---
+
+## ProxyFactory, Advice, Pointcut
+
+개발자는 ProxyFactory로 Interface인지, Class인지 구분하지 않고, `Advice`를 등록하면 된다.<br>
+ProxyFactory는 Interface가 있으면 JDK Proxy를 생성하고, 없으면 CGLIB를 생성해서 Client에게 제공한다.<br>
+ProxyFactory로 생성된 Proxy는 `Advice`를 호출한다.<br>
+그래서 사용자는 Proxy의 종류에 구애받지 않고 `Advice`로 공통기능을 작성하면 된다.
+특정 메서드 패턴만 작동한다던지 동작에 조건을 걸때는 `PointCut`을 사용하면 된다.
 
 
+<br>
+> Advice : 프록시 기능<br>
+> Pointcut : 특정 조건을 달성할 때만 프록시 기능이 적용되는 것<br>
+> JoinPoint : Advice가 적용되는 지점<br>
+> Target : Advice가 적용되는 대상<br>
+> Weaving : Advice를 Target에 적용하는 것<br>
+> AOP : Aspect Oriented Programming<br>
 
 
+### ProxyFactory 사용법
+
+> Advice를 정의한다.
+
+```java
+
+@Slf4j
+public class TimeAdvice implements MethodInterceptor {
+    /**
+     *
+     * @param invocation the method invocation joinpoint
+     * @return
+     * @throws Throwable
+     */
+    @Override
+    public Object invoke(MethodInvocation invocation) throws Throwable {
+        log.info("TimeProxy 실행");
+        long start = System.currentTimeMillis();
+
+        /**
+         더이상 target을 넣지 않고, invocation에 이미 담겨져있다.
+         target을 찾아서 원본을 실행해준다,
+         */
+        // Object result = methodProxy.invoke(target, args);
+        Object result = invocation.proceed();
+
+        long end = System.currentTimeMillis();
+        log.info("TimeProxy 종료");
+        log.info("TimeProxy 실행 시간: {}ms", end - start);
+        return result;
+    }
+}
+
+```
+
+* `import org.aopalliance.intercept.MethodInterceptor` : Advice를 구현하는 인터페이스<br>
+* ProxyFactory를 생성할 때 이미 target이 있기 때문에, Advice에서 target을 찾아서 실행할 필요가 없다.<br>
+
+
+> ProxyFactory를 생성한다.
+
+```java
+
+@Test
+    @DisplayName("인터페이스가 있으면 JDK 동적 프록시 사용")
+    void interfaceProxy() {
+        /**
+         * 실제 target으로 ProxyFactory 생성,
+         * Advice를 추가하여 Proxy 기능을 담는다.
+         */
+        ServiceInterface target = new ServiceImpl();
+        ProxyFactory proxyFactory = new ProxyFactory(target);
+        proxyFactory.addAdvice(new TimeAdvice());
+
+        ServiceInterface proxy = (ServiceInterface) proxyFactory.getProxy();
+
+        //proxy 작동
+        proxy.save();
+
+        /**
+         * `AopUtils`
+         * ProxyFactory로 Proxy를 생성했을때 사용 가능하다.
+         */
+
+        //타겟이 Proxy객체인지 확인
+        Assertions.assertThat(AopUtils.isAopProxy(proxy)).isTrue();
+        //타겟이 Proxy객체이면서 인터페이스를 구현한 Proxy인지 확인
+        Assertions.assertThat(AopUtils.isJdkDynamicProxy(proxy)).isTrue();
+        //타겟이 Proxy객체이면서 클래스를 상속받은 Proxy인지 확인
+        Assertions.assertThat(AopUtils.isCglibProxy(proxy)).isFalse();
+
+    }
+
+    
+```
+* `ProxyFactory proxyFactory = new ProxyFactory(target);` : target을 넣어서 최초 생성한다.
+* `proxyFactory.addAdvice(new TimeAdvice());` : Advice를 추가한다.
+* ` ServiceInterface proxy = (ServiceInterface) proxyFactory.getProxy();` : Proxy를 생성한다.
+* `AopUtils` : ProxyFactory로 생성된 Proxy를 확인할 수 있다.
+
+* Interface가 없는 경우에도 그냥 비슷하게 구현해주면 된다.
+
+
+### 결론
+
+ProxyFactory로 추상화 했기 때문에, Proxy 기술에 의존하지 않고 사용할 수 있다.<br>
+부가 기능 로직도 `Advice`로 분리해서 사용할 수 있다.<br>
+InvocationHandler와 MethodInterceptor가 Advice를 호출하도록 되어있기 때문이다.<br> 
