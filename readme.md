@@ -766,6 +766,13 @@ CGLIB는 보통 직접 구현해서 사용하는 경우는 없다. `ProxyFactory
 
 ---
 
+
+
+
+
+
+
+
 ## ProxyFactory, Advice, Pointcut
 
 개발자는 ProxyFactory로 Interface인지, Class인지 구분하지 않고, `Advice`를 등록하면 된다.<br>
@@ -773,6 +780,21 @@ ProxyFactory는 Interface가 있으면 JDK Proxy를 생성하고, 없으면 CGLI
 ProxyFactory로 생성된 Proxy는 `Advice`를 호출한다.<br>
 그래서 사용자는 Proxy의 종류에 구애받지 않고 `Advice`로 공통기능을 작성하면 된다.
 특정 메서드 패턴만 작동한다던지 동작에 조건을 걸때는 `PointCut`을 사용하면 된다.
+
+
+`PointCut` : 어디에 부가기능을 적용할지, 어디에 부가기능을 적용하지 않을지 판단하는 필터링 로직이다.
+주로 클래스와 메서드 이름으로 필터링 한다. 이름 그대로 어떤 포인트(Point)에 기능을 적용할지 안할지 잘라서 구분 (cut)
+`Advice` : 프록시가 호출하는 부가기능. 공통 로직
+`Advisor` : 하나의 포인트컷 + 어드바이스를 가지고 있는 객체. 어드바이스를 어디에 적용할지 결정하는 역할
+
+
+공통기능인 Advice를 제작하고, 어디에 적용할지 결정하는 PointCut을 만들어서 Advisor에 넣어서 ProxyFactory에 등록한다.<br>
+
+>구분한 이유 ? -> 역할과 책임 분배
+
+* 포인트컷 -> 부가 기능 적용 여부 결정하는 필터 기능만 담당
+* 어드바이스 -> 부가 기능만 담당
+* 둘을 한 세트로 합쳐 어드바이저로 뭉쳐 사용.
 
 
 <br>
@@ -871,4 +893,190 @@ public class TimeAdvice implements MethodInterceptor {
 
 ProxyFactory로 추상화 했기 때문에, Proxy 기술에 의존하지 않고 사용할 수 있다.<br>
 부가 기능 로직도 `Advice`로 분리해서 사용할 수 있다.<br>
-InvocationHandler와 MethodInterceptor가 Advice를 호출하도록 되어있기 때문이다.<br> 
+InvocationHandler와 MethodInterceptor가 Advice를 호출하도록 되어있기 때문이다.<br>
+위의 예제는 Advice 와 PointCut이 함께 구현되어있기 때문에, 둘을 구분하여야 `단일책임원칙`을<br>
+지켜 따로 생성해야한다.<br>
+
+
+---
+
+## 단일 책임 원칙을 지킨 ProxyFactory
+
+
+<img width="768" alt="스크린샷 2022-11-20 오후 3 49 10" src="https://user-images.githubusercontent.com/37995817/202889812-12c47673-c2ac-467c-a2fc-768628f794ed.png">
+<img width="705" alt="스크린샷 2022-11-20 오후 3 49 19" src="https://user-images.githubusercontent.com/37995817/202889815-1c3a4187-4aad-43f5-bf29-ea7b80e93eba.png">
+
+
+### 작동 순서
+
+(1)client -> Proxy 객체 호출<br>
+(2)-> Proxy 객체(ProxyFactory로 생성한) 는 Advisor 호출<br>
+(3)-> Advisor는 PointCut 필터를 호출<br>
+(4)-> PointCut 필터에 통과되어 적용 가능하면 Advice를 호출<br>
+(5)-> Advice는 InvocationHandler 또는 MethodInterceptor를 호출<br>
+(6)-> InvocationHandler 또는 MethodInterceptor는 타겟을 호출<br>
+(7)-> 타겟은 실제 로직(Method)을 수행<br>
+<br>
+
+### 구현
+
+> target
+
+```java
+
+    public interface ServiceInterface {
+        void save();
+
+        void find();
+    }
+
+    public class ServiceImpl implements ServiceInterface {
+        @Override
+        public void save() {
+            System.out.println("save");
+        }
+        @Override
+        public void find() {
+            log.info("find 호출");
+        }
+    }
+
+```
+
+* save, find 메서드를 가진 구현체이다.
+
+<br>
+
+> ProxyFactory + Advisor
+
+
+```java
+
+@Test
+@DisplayName("스프링이 제공하는 포인트컷")
+    void advisorTest3() {
+            ServiceInterface target = new ServiceImpl();
+            ProxyFactory proxyFactory = new ProxyFactory(target);
+
+            /**
+             * 메소드 네임이 save인 경우에만 허용
+             */
+            NameMatchMethodPointcut nameMatchMethodPointcut = new NameMatchMethodPointcut();
+            nameMatchMethodPointcut.setMappedName("save");
+
+            DefaultPointcutAdvisor advisor = new DefaultPointcutAdvisor(nameMatchMethodPointcut , new TimeAdvice());
+            proxyFactory.addAdvisor(advisor);
+
+            ServiceInterface proxy =    (ServiceInterface) proxyFactory.getProxy();
+
+            proxy.save();
+            proxy.find();
+
+            }
+```
+
+* `new ProxyFactory(target)` : 타겟을 넣어 프록시 팩토리를 생성한다.
+* `new TimeAdvice()` : `import org.aopalliance.intercept.MethodInterceptor` 의 invoke 메서드를 구현한 구현체이다. (Advice)
+* `new DefaultPointcutAdvisor(Pointcut.TRUE, new TimeAdvice())` : 기본 PointCut을 가진 Advisor를 생성한다.
+* `proxyFactory.addAdvisor(advisor)` : Advisor를 추가한다.
+* `ServiceInterface proxy = (ServiceInterface) proxyFactory.getProxy();` : Proxy를 생성한다.
+
+
+### PointCut 종류
+
+* `NameMatchMethodPointcut` : 메서드 이름으로 허가
+* `JdkRegexpMethodPointcut` : 정규식으로 허가
+* `TruePointcut` : 모든 메서드 허가
+* `AnnotationMatchingPointcut` : 어노테이션으로 허가
+* `AspectJExpressionPointcut` : AspectJ 표현식으로 허가
+
+실무에서는 `AspectJExpressionPointcut` : AspectJ 표현식으로 허가 를 많이 사용한다.
+
+
+
+
+
+## MultiAdvisor
+
+Target에 여러 부가기능이 달리게 한다.
+
+
+> advisor1,2 제작
+
+```java
+
+    static class Advice1 implements MethodInterceptor {
+        @Override
+        public Object invoke(MethodInvocation invocation) throws Throwable {
+            log.info("Advice1 실행");
+            return invocation.proceed();
+        }
+    }
+
+    static class Advice2 implements MethodInterceptor {
+        @Override
+        public Object invoke(MethodInvocation invocation) throws Throwable {
+            log.info("Advice2 실행");
+            return invocation.proceed();
+        }
+    }
+
+```
+
+
+> 적용
+
+```java
+
+    @Test
+    @DisplayName("proxy -> multiAdvisor")
+    void multiAdvisorTest2() {
+
+        //advisor1,2 생성
+        DefaultPointcutAdvisor advisor1 = new DefaultPointcutAdvisor(Pointcut.TRUE, new Advice1());
+        DefaultPointcutAdvisor advisor2 = new DefaultPointcutAdvisor(Pointcut.TRUE, new Advice2());
+
+        ServiceInterface target = new ServiceImpl();
+
+        ProxyFactory proxyFactory = new ProxyFactory(target);
+
+        //등록 순서대로 먼저 실행된다 proxy2 -> proxy1
+        proxyFactory.addAdvisor(advisor2);
+        proxyFactory.addAdvisor(advisor1);
+        ServiceInterface proxy = (ServiceInterface) proxyFactory.getProxy();
+
+        proxy.save();
+    }
+```
+
+
+### 💡참고사항
+
+Spring AOP에서도 이와 같이 객체당 Proxy 객체는 하나만 만들고,<br>
+Advisor를 여러개 적용하여 넣는 방식으로 사용된다. (Proxy 객체가 여러개 생긴다고 생각하면 안됨)<br>
+
+
+### 적용 예시
+
+```java
+
+private Advisor getAdvisor(LogTrace logTrace) {
+        //pointcut
+        NameMatchMethodPointcut pointcut = new NameMatchMethodPointcut();
+        pointcut.setMappedNames("request*", "order*", "save*");
+        //advice
+        LogTraceAdvice advice = new LogTraceAdvice(logTrace);
+        return new DefaultPointcutAdvisor(pointcut, advice);
+
+        }
+```
+
+
+## 빈 후처리기 (Bean Post Processor)
+
+요즘은 ComponentScan을 사용하여 어노테이션으로 다 Bean을 자동으로 등록하고,<br>
+직접 설정을 하는 경우가 드물기 때문에, Proxy를 등록할 때 빈 후처리기를 사용한다.<br>
+
+Bean을 등록할 때 BeanPostProcessor를 사용하여 Bean을 후처리한다.<br>
+
+
